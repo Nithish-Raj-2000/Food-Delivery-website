@@ -27,11 +27,7 @@
     setTimeout(function () { t.classList.add('hide'); setTimeout(function () { t.remove(); }, 420); }, 3400);
   };
   window.go404 = function () {
-    if (IS_DASH) {
-      var onTab = document.querySelector('.dash-link.on');
-      if (onTab) try { sessionStorage.setItem('stackly_ret_tab', byData(onTab, 'tab')); } catch (e) { }
-    }
-    location.href = IS_DASH ? '404dash.html' : '404.html';
+    toast('Preview only', 'This Stackly site is a demo \u2014 actions are not connected to a live service and no data is collected or stored.');
   };
 
   /* copy helpers */
@@ -118,22 +114,6 @@
   $all('a[href="#"]').forEach(function (a) {
     a.addEventListener('click', function (e) { e.preventDefault(); window.go404(); });
   });
-  /* ---------- catch-all 404: every CTA / button on public pages (cards are inert) ---------- */
-  var PUBLIC_PAGES = ['index.html', 'about.html', 'services.html', 'menu.html', 'blogs.html', 'contact.html'];
-  if (PUBLIC_PAGES.indexOf(CURRENT) > -1) {
-    var ROUTE_SKIP = 'header, footer, .sidebar, .mini-drawer, .order-pop-overlay, .toast-stack, .faq-q, .filter-chip, .js-add-cart, .dish-wishlist, .js-copy, .js-404, .js-404dash, .breadcrumb, .skip-link, form';
-    document.addEventListener('click', function (e) {
-      var el = e.target;
-      if (!el || !el.closest) return;
-      if (el.closest(ROUTE_SKIP)) return;
-      if (el.closest('a[href^="tel:"], a[href^="mailto:"]')) return;
-      var card = el.closest('article[class*="card"], .tile, [class*="card"]');
-      var link = el.closest('a');
-      var btn = el.closest('button');
-      if (card && !link && !btn) return;
-      if (link || btn) { e.preventDefault(); window.go404(); }
-    });
-  }
   /* ---------- cart & wishlist (live) ---------- */
   if ($all('.js-cart-open, .js-wish-open').length) {
     var cart = [];
@@ -728,8 +708,7 @@
   window.validators = {
     email: /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
     phone: /^[6-9]\d{9}$/,
-    name: /^[A-Za-z][A-Za-z\s.'-]{1,49}$/,
-    password: /^(?=.*[A-Za-z])(?=.*\d).{8,}$/
+    name: /^[A-Za-z][A-Za-z\s.'-]{1,49}$/
   };
   function setError(field, msg) {
     if (!field || !field.closest) return;
@@ -925,7 +904,7 @@
       meter.style.width = (n / 5 * 100) + '%';
       meter.style.background = n <= 1 ? '#e23c4b' : n === 2 ? '#ff7a1f' : n === 3 ? '#ffc24b' : n === 4 ? '#22c55e' : '#0fb986';
     }
-    if (hint) hint.textContent = !v ? '\u2014' : n <= 1 ? 'Weak' : n === 2 ? 'Weak' : n === 3 ? 'Fair' : n === 4 ? 'Good' : 'Strong';
+    if (hint) hint.textContent = !v ? '\u2014' : 'OK (demo \u2014 not stored)';
     var rules = root.querySelectorAll('.pass-rules li');
     if (rules.length) {
       var st = passRulesState(v);
@@ -1279,19 +1258,8 @@
         validate: function (v) { return /^[6-9]\d{9}$/.test(v) ? { ok: true } : { ok: false, msg: 'Enter a valid 10-digit number starting with 6\u20139' }; }
       }),
       makeValidator(sPass, {
-        required: true, reqMsg: 'Please create a password', okMsg: 'Strong password', onInput: sPaint,
-        validate: function (v) {
-          if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s]).{8,64}$/.test(v)) {
-            var miss = [];
-            if (v.length < 8) miss.push('8+ characters');
-            if (!/[a-z]/.test(v)) miss.push('a lowercase letter');
-            if (!/[A-Z]/.test(v)) miss.push('an uppercase letter');
-            if (!/\d/.test(v)) miss.push('a number');
-            if (!/[^A-Za-z0-9\s]/.test(v)) miss.push('a special character');
-            return { ok: false, msg: 'Add ' + miss.slice(0, 2).join(', ') };
-          }
-          return { ok: true };
-        }
+        required: true, reqMsg: 'Please create a password', okMsg: 'Looks good', onInput: sPaint,
+        validate: function (v) { return v.length >= 4 ? { ok: true } : { ok: false, msg: 'Any 4+ characters (demo \u2014 not stored)' }; }
       }),
       makeValidator(sConfirm, {
         required: true, reqMsg: 'Please confirm your password', okMsg: 'Passwords match',
@@ -1317,7 +1285,7 @@
       var email = sform.email.value.trim().toLowerCase();
       if (users[email]) { vSet(sform.email, 'bad', 'An account with this email already exists'); sform.email.focus(); return; }
       var role = getRole();
-      users[email] = { name: sform.fullName.value.trim(), email: email, phone: sform.phone.value.trim(), password: sform.password.value.trim(), role: role };
+      users[email] = { name: sform.fullName.value.trim(), email: email, phone: sform.phone.value.trim(), role: role };
       saveUsers(users);
       try { sessionStorage.setItem('stackly_want_role', role); } catch (e) { }
       toast('Account created!', 'Welcome to Stackly. Now log in as ' + role + '.');
@@ -1346,14 +1314,12 @@
     var lRefresh = bindFormGate(lform, lSetups, lform.querySelector('.btn-glitter'));
     lform._onValid = function () {
       var email = lform.email.value.trim().toLowerCase();
-      var pw = lform.password.value;
       var wantRole = getRole();
       var users = getUsers();
       var user = users[email];
       if (!user && email === DEMO.admin.email) user = DEMO.admin;
       if (!user && email === DEMO.customer.email) user = DEMO.customer;
       if (!user) { vSet(lform.email, 'bad', 'No account found. Please sign up first.'); newError('No account found'); return; }
-      if (user.password !== pw) { vSet(lform.password, 'bad', 'Incorrect password'); newError('Incorrect password'); return; }
       if (user.role !== wantRole) {
         newError('Role mismatch');
         var sw = document.querySelector('.role-switch');

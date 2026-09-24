@@ -634,6 +634,8 @@ form input, form textarea, form select { caret-color: auto; }
 .auth-panel .auth-panel-back { display: none; position: absolute; top: 34px; left: 34px; z-index: 5; }
 .auth-form-shell { flex: 1; min-height: 0; overflow-y: auto; display: flex; align-items: flex-start; justify-content: center; padding: clamp(1.6rem, 4vw, 4rem); position: relative; scrollbar-width: thin; }
 .auth-card { width: min(460px, 100%); margin: auto 0; }
+.auth-card .demo-notice { display: flex; align-items: flex-start; gap: 8px; margin: -6px 0 20px; padding: 12px 14px; border-radius: 14px; background: rgba(255,194,75,.12); border: 1px solid rgba(255,194,75,.4); color: var(--ink-mid); font-size: .82rem; line-height: 1.5; }
+.auth-card .demo-notice strong { color: var(--ink); }
 .auth-card .form-head { margin-bottom: 26px; }
 .auth-card h1 { font-size: clamp(1.7rem, 3vw, 2.4rem); }
 .auth-brand-chip { display: inline-flex; align-items: center; gap: 10px; font-family: var(--font-head); font-weight: 900; margin-bottom: 18px; }
