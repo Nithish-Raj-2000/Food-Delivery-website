@@ -8,8 +8,6 @@
   var REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var CURRENT = location.pathname.split('/').pop() || 'index.html';
   var IS_DASH = /dash/i.test(CURRENT);
-  var CART_SK = 'stackly_cart';
-  var WISH_SK = 'stackly_wishlist';
 
   /* ---------- helpers ---------- */
   function $all(sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
@@ -27,7 +25,11 @@
     setTimeout(function () { t.classList.add('hide'); setTimeout(function () { t.remove(); }, 420); }, 3400);
   };
   window.go404 = function () {
-    toast('Preview only', 'This Stackly site is a demo \u2014 actions are not connected to a live service and no data is collected or stored.');
+    if (IS_DASH) {
+      var onTab = document.querySelector('.dash-link.on');
+      if (onTab) try { sessionStorage.setItem('stackly_ret_tab', byData(onTab, 'tab')); } catch (e) { }
+    }
+    location.href = IS_DASH ? '404dash.html' : '404.html';
   };
 
   /* copy helpers */
@@ -114,285 +116,32 @@
   $all('a[href="#"]').forEach(function (a) {
     a.addEventListener('click', function (e) { e.preventDefault(); window.go404(); });
   });
-  /* ---------- cart & wishlist (live) ---------- */
-  if ($all('.js-cart-open, .js-wish-open').length) {
-    var cart = [];
-    var wish = [];
-    function normalize(list) {
-      if (!Array.isArray(list)) return [];
-      return list.filter(function (it) { return it && typeof it === 'object' && (it.name || it.id); })
-        .map(function (it) {
-          var name = String(it.name || it.id || 'Dish');
-          return {
-            id: String(it.id || name.toLowerCase().replace(/\s+/g, '-')),
-            name: name,
-            price: Number(it.price) || 0,
-            img: typeof it.img === 'string' ? it.img : '',
-            qty: Math.max(1, parseInt(it.qty, 10) || 1)
-          };
-        });
-    }
-    function loadStore() {
-      try { cart = getCart(); } catch (e) { cart = []; }
-      try { wish = getWish(); } catch (e) { wish = []; }
-    }
-    loadStore();
-
-    function money(n) { n = Number(n); if (!isFinite(n)) n = 0; return '&#8377;' + n.toLocaleString('en-IN'); }
-    function dishFromCard(card) {
-      var h = card.querySelector('h3');
-      var pe = card.querySelector('.dish-price');
-      var im = card.querySelector('.dish-card-media img');
-      var name = h ? h.textContent.trim() : 'Dish';
-      var price = pe ? parseFloat(pe.textContent.replace(/[^0-9.]/g, '')) : 0;
-      if (!price) price = 0;
-      return { id: name.toLowerCase().replace(/\s+/g, '-'), name: name, price: price, img: im ? im.getAttribute('src') : '' };
-    }
-    function saveC(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
-    function subTotal() { return cart.reduce(function (s, it) { return s + it.price * it.qty; }, 0); }
-    function wishTotal() { return wish.reduce(function (s, it) { return s + it.price; }, 0); }
-
-    var dw = document.createElement('div');
-    dw.id = 'stacklyChrome';
-    dw.innerHTML =
-      '<div class="drawer-overlay" id="mDOverlay" aria-hidden="true"></div>' +
-      '<aside class="mini-drawer" id="mDrawer" aria-hidden="true" aria-label="Cart and wishlist">' +
-        '<div class="drawer-head"><h3 id="mDTitle">Your Cart</h3><button class="drawer-close" id="mDClose" aria-label="Close cart and wishlist" type="button">&#10005;</button></div>' +
-        '<div class="drawer-body"><div class="drawer-items" id="mDItems"></div></div>' +
-        '<div class="drawer-foot"><div class="drawer-total"><span id="mDTotalLbl">Subtotal</span><b id="mDTotal">&#8377;0</b></div><button class="btn btn-primary btn-lg" id="mDCta" type="button">Place Order</button></div>' +
-      '</aside>' +
-      '<div class="order-pop-overlay" id="orderPop" aria-hidden="true"><div class="order-pop" role="dialog" aria-modal="true" aria-label="Order placed">' +
-        '<span class="op-ico">&#10004;</span><b>Order Placed!</b><p id="orderPopMsg">Your food is on its way &#8212; see you in ~30 min.</p>' +
-        '<button class="btn btn-primary btn-sm" id="opTrack" type="button">Track My Order</button>' +
-        '<button class="op-close" id="opClose" type="button">Done</button>' +
-      '</div></div>';
-    document.body.appendChild(dw);
-
-    var overlay = document.getElementById('mDOverlay');
-    var drawer = document.getElementById('mDrawer');
-    var DTitle = document.getElementById('mDTitle');
-    var DItems = document.getElementById('mDItems');
-    var DTotal = document.getElementById('mDTotal');
-    var DTotalRow = DTotal ? DTotal.closest('.drawer-total') : null;
-    var DTotalLbl = document.getElementById('mDTotalLbl');
-    var DCta = document.getElementById('mDCta');
-    var orderPop = document.getElementById('orderPop');
-    var orderMsg = document.getElementById('orderPopMsg');
-    var mode = 'cart';
-
-    function refreshBadges() {
-      loadStore();
-      var cc = cart.reduce(function (s, it) { return s + it.qty; }, 0);
-      $all('[data-cart-count]').forEach(function (b) { b.textContent = cc; });
-      $all('[data-wish-count]').forEach(function (b) { b.textContent = wish.length; });
-      $all('.js-wish-open').forEach(function (b) { b.classList.toggle('on', wish.length > 0); });
-      $all('.js-cart-open').forEach(function (b) { b.classList.toggle('on', cc > 0); });
-    }
-
-    function syncStoreCheck() {
-      if (window.syncStoreUI) window.syncStoreUI();
-    }
-    window._refreshStoreUI = function () { loadStore(); refreshBadges(); };
-
-    function emptyHTML(kind) {
-      return '<div class="drawer-empty"><span class="de-ico">' + (kind === 'cart' ? '&#128722;' : '&#9825;') + '</span><b>Your ' + kind + ' is empty</b><p>' + (kind === 'cart' ? 'Add your favourite dishes and they will appear here.' : 'Tap the heart on any dish to keep it here.') + '</p><a class="btn btn-primary btn-sm" href="menu.html">Browse The Menu</a></div>';
-    }
-
-    function render() {
-      var isCart = mode === 'cart';
-      DTitle.textContent = isCart ? 'Your Cart (' + cart.length + ')' : 'Your Wishlist (' + wish.length + ')';
-      if (DTotalRow) DTotalRow.style.display = isCart ? '' : 'none';
-      DTotalLbl.textContent = isCart ? 'Subtotal' : 'Wishlist value';
-      DCta.innerHTML = isCart ? 'Place Order' : 'Move All To Cart';
-      DTotal.innerHTML = money(isCart ? subTotal() : wishTotal());
-      DItems.innerHTML = '';
-      if (mode === 'cart') {
-        if (!cart.length) { DItems.innerHTML = emptyHTML('cart'); return; }
-        cart.forEach(function (it, idx) {
-          var row = document.createElement('div');
-          row.className = 'drawer-item';
-          row.setAttribute('data-i', idx);
-          row.innerHTML = '<img src="' + escHTML(it.img) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' +
-            '<div class="di-info"><b>' + escHTML(it.name) + '</b><span>' + money(it.price) + '</span>' +
-            '<div class="di-qty"><button data-q="dec" aria-label="Decrease quantity">&#8722;</button><span>' + it.qty + '</span><button data-q="inc" aria-label="Increase quantity">+</button></div></div>' +
-            '<button class="di-x" data-x aria-label="Remove from cart">&#10005;</button>';
-          DItems.appendChild(row);
-        });
-      } else {
-        if (!wish.length) { DItems.innerHTML = emptyHTML('wish'); return; }
-        wish.forEach(function (it, idx) {
-          var row = document.createElement('div');
-          row.className = 'drawer-item';
-          row.setAttribute('data-w', idx);
-          row.innerHTML = '<img src="' + escHTML(it.img) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' +
-            '<div class="di-info"><b>' + escHTML(it.name) + '</b><span>' + money(it.price) + '</span></div>' +
-            '<button class="di-move" data-move type="button">Move to cart</button>' +
-            '<button class="di-x" data-xw aria-label="Remove from wishlist">&#10005;</button>';
-          DItems.appendChild(row);
-        });
-      }
-    }
-
-    function openDrawer(m) {
-      mode = m;
-      render();
-      drawer.classList.add('open'); drawer.setAttribute('aria-hidden', 'false');
-      overlay.classList.add('open'); overlay.setAttribute('aria-hidden', 'false');
-      document.body.classList.add('no-scroll');
-    }
-    function closeDrawer() {
-      drawer.classList.remove('open'); drawer.setAttribute('aria-hidden', 'true');
-      overlay.classList.remove('open'); overlay.setAttribute('aria-hidden', 'true');
-      document.body.classList.remove('no-scroll');
-    }
-
-    function showOrderPop(msg) {
-      orderMsg.textContent = msg;
-      orderPop.classList.add('open'); orderPop.setAttribute('aria-hidden', 'false');
-      document.body.classList.add('no-scroll');
-      clearTimeout(showOrderPop._t);
-      showOrderPop._t = setTimeout(closeOrderPop, 8000);
-    }
-    function closeOrderPop() {
-      orderPop.classList.remove('open'); orderPop.setAttribute('aria-hidden', 'true');
-      document.body.classList.remove('no-scroll');
-      clearTimeout(showOrderPop._t);
-    }
-    function placeOrder() {
-      var n = cart.reduce(function (s, it) { return s + it.qty; }, 0);
-      var sub = subTotal();
-      var cust = null;
-      try { cust = JSON.parse(localStorage.getItem(USER_KEY)); } catch (e) { }
-      var order = {
-        id: nextOrderId(),
-        items: cart.map(function (it) { return { name: it.name, price: it.price, img: it.img, qty: it.qty }; }),
-        subtotal: sub,
-        restaurant: 'Stackly Kitchen',
-        customer: cust && cust.name ? { name: cust.name, email: cust.email || '' } : { name: 'Guest Customer', email: '' },
-        status: 'pending',
-        time: Date.now()
-      };
-      var list = getOrders();
-      list.unshift(order);
-      saveOrders(list);
-      cart = [];
-      saveC(CART_SK, cart);
-      refreshBadges();
-      syncStoreCheck();
-      closeDrawer();
-      showOrderPop('Order ' + order.id + ' &#8212; ' + n + ' item' + (n === 1 ? '' : 's') + ' are being packed. ETA: 30 min.');
-    }
-
-    orderPop.addEventListener('click', function (e) { if (e.target === orderPop) closeOrderPop(); });
-    document.getElementById('opClose').addEventListener('click', closeOrderPop);
-    document.getElementById('opTrack').addEventListener('click', function (e) {
+  /* ---------- cart & wishlist icons -> 404 (demo) ---------- */
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('.js-cart-open, .js-wish-open')) {
       e.preventDefault();
-      closeOrderPop();
+      location.href = IS_DASH ? '404dash.html' : '404.html';
+    }
+  });
+  /* ---------- public catch-all: every button / CTA / link on public pages -> 404 (forms stay live) ---------- */
+  var PUBLIC_PAGES = ['index.html', 'about.html', 'services.html', 'menu.html', 'blogs.html', 'contact.html'];
+  if (PUBLIC_PAGES.indexOf(CURRENT) > -1) {
+    document.addEventListener('click', function (e) {
+      var el = e.target;
+      if (!el || !el.closest) return;
+      if (el.closest('form')) return;
+      if (el.closest('.nav-link, a[href="login.html"], a.logo')) return;
+      if (el.closest('.toast-stack, .loader, .skip-link, .scroll-progress')) return;
+      if (el.closest('a[href^="tel:"], a[href^="mailto:"]')) return;
+      var hit = el.closest('button, a[href], [role="button"], [tabindex]');
+      if (!hit) return;
+      e.preventDefault();
+      e.stopPropagation();
       window.go404();
     });
-
-    function syncHearts() {
-      $all('.dish-wishlist').forEach(function (btn) {
-        var card = btn.closest('.dish-card'); if (!card) return;
-        var dish = dishFromCard(card);
-        var on = wish.filter(function (x) { return x.id === dish.id; }).length > 0;
-        btn.classList.toggle('on', on);
-        btn.innerHTML = on ? '&#10084;' : '&#9825;';
-        btn.setAttribute('aria-label', on ? 'Remove from favourites' : 'Add to favourites');
-      });
-    }
-
-    function addToCart(dish, silent) {
-      var ex = cart.filter(function (x) { return x.id === dish.id; })[0];
-      if (ex) { ex.qty += 1; } else { cart.push({ id: dish.id, name: dish.name, price: dish.price, img: dish.img, qty: 1 }); }
-      saveC(CART_SK, cart);
-      refreshBadges();
-      syncStoreCheck();
-      if (!silent) toast('Added to cart', '"' + dish.name + '" &#8226; ' + money(dish.price));
-    }
-
-    function toggleWish(btn) {
-      var card = btn.closest('.dish-card'); if (!card) return;
-      var dish = dishFromCard(card);
-      var i = wish.map(function (x) { return x.id; }).indexOf(dish.id);
-      if (i >= 0) { wish.splice(i, 1); toast('Removed', '"' + dish.name + '" left your wishlist.'); }
-      else { wish.push(dish); toast('Saved to wishlist', '"' + dish.name + '" is yours to keep.'); }
-      saveC(WISH_SK, wish); syncHearts(); refreshBadges(); syncStoreCheck();
-    }
-
-    document.addEventListener('click', function (e) {
-      var t = e.target;
-      if (!t || !t.closest) return;
-      if (t.closest('.js-wish-open')) { e.preventDefault(); openDrawer('wish'); return; }
-      if (t.closest('.js-cart-open')) { e.preventDefault(); openDrawer('cart'); return; }
-      var heart = t.closest('.dish-wishlist');
-      if (heart) { e.preventDefault(); toggleWish(heart); }
-    });
-    drawer.querySelector('.drawer-close').addEventListener('click', closeDrawer);
-    overlay.addEventListener('click', closeDrawer);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawer(); });
-
-    DItems.addEventListener('click', function (e) {
-      var t = e.target;
-      var x = t.closest('[data-x]');
-      var xw = t.closest('[data-xw]');
-      var q = t.closest('[data-q]');
-      var mv = t.closest('[data-move]');
-      var row = t.closest('.drawer-item');
-      if (!row || (!x && !xw && !q && !mv)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (x) {
-        var i = parseInt(row.getAttribute('data-i'), 10);
-        if (!isNaN(i) && cart[i]) cart.splice(i, 1);
-        saveC(CART_SK, cart); refreshBadges(); render(); syncStoreCheck();
-      } else if (xw) {
-        var j = parseInt(row.getAttribute('data-w'), 10);
-        if (!isNaN(j) && wish[j]) wish.splice(j, 1);
-        saveC(WISH_SK, wish); refreshBadges(); syncHearts(); render(); syncStoreCheck();
-      } else if (q) {
-        var i2 = parseInt(row.getAttribute('data-i'), 10);
-        if (!isNaN(i2) && cart[i2]) {
-          if (q.getAttribute('data-q') === 'inc') { cart[i2].qty += 1; } else { cart[i2].qty -= 1; if (cart[i2].qty < 1) cart.splice(i2, 1); }
-          saveC(CART_SK, cart); refreshBadges(); render(); syncStoreCheck();
-        }
-      } else if (mv) {
-        var k = parseInt(row.getAttribute('data-w'), 10);
-        if (!isNaN(k) && wish[k]) { addToCart(wish[k], true); wish.splice(k, 1); }
-        saveC(WISH_SK, wish); refreshBadges(); syncHearts(); render(); syncStoreCheck();
-        toast('Moved to cart', 'Your wishlist item is now in your cart.');
-      }
-    });
-
-    DCta.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (mode === 'cart') {
-        if (!cart.length) return;
-        placeOrder();
-      } else {
-        if (!wish.length) return;
-        var n = wish.length;
-        wish.forEach(function (d) { addToCart(d, true); });
-        wish = [];
-        saveC(WISH_SK, wish); refreshBadges(); syncHearts(); render(); syncStoreCheck();
-        toast('All sent to cart', n + ' item' + (n === 1 ? '' : 's') + ' moved to your cart.');
-        openDrawer('cart');
-      }
-    });
-
-    $all('.js-add-cart').forEach(function (btn) {
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        var card = btn.closest('.dish-card');
-        if (card) addToCart(dishFromCard(card), false);
-      });
-    });
-
-    refreshBadges();
-    syncHearts();
   }
-
   /* ---------- active nav highlight ---------- */
   $all('.nav-link, .dash-link').forEach(function (l) {
     if (l.getAttribute('href') === CURRENT) l.classList.add('active', 'on');
@@ -1095,118 +844,14 @@
     return on ? (on.classList.contains('admin') ? 'admin' : 'customer') : 'customer';
   }
 
-  /* pre-select role remembered from signup */
-  try {
-    var wantRole = sessionStorage.getItem('stackly_want_role');
-    if (wantRole) {
-      sessionStorage.removeItem('stackly_want_role');
-      var swHome = document.querySelector('.role-switch');
-      if (swHome) {
-        var wantOpt = swHome.querySelector('.role-opt.' + wantRole);
-        if (wantOpt) wantOpt.click();
-      }
-    }
-  } catch (e) { }
-
-  /* ---------- AUTH STORE ---------- */
-  var USER_KEY = 'stackly_user';
-  var USERS_KEY = 'stackly_users';
-  var DEMO = {
-    admin: { name: 'Site Admin', email: 'admin@stackly.com', role: 'admin', phone: '9876543210' },
-    customer: { name: 'Aarav Sharma', email: 'customer@stackly.com', role: 'customer', phone: '9876543211' }
-  };
-  function getUsers() {
-    var raw = null;
-    try { raw = JSON.parse(localStorage.getItem(USERS_KEY)); } catch (e) { raw = null; }
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-    return raw;
-  }
-  function saveUsers(u) {
-    var clean = {};
-    if (u && typeof u === 'object' && !Array.isArray(u)) clean = u;
-    localStorage.setItem(USERS_KEY, JSON.stringify(clean));
-  }
+  /* ---------- auth helpers ---------- */
   function dashURL(role) { return role === 'admin' ? 'admin-dashboard.html' : 'customer-dashboard.html'; }
-
-  /* ---------- SHARED ORDER STORE (circulates across every page) ---------- */
-  var ORDERS_KEY = 'stackly_orders';
-  function getOrders() {
-    try { var o = JSON.parse(localStorage.getItem(ORDERS_KEY)); return Array.isArray(o) ? o : []; } catch (e) { return []; }
-  }
-  function saveOrders(list) {
-    if (!Array.isArray(list)) list = [];
-    try { localStorage.setItem(ORDERS_KEY, JSON.stringify(list)); } catch (e) { }
-  }
-  function nextOrderId() {
-    var max = 2072;
-    getOrders().forEach(function (o) {
-      var m = /^STK-(\d+)$/.exec(String(o.id || ''));
-      if (m) max = Math.max(max, parseInt(m[1], 10));
-    });
-    return 'STK-' + (max + 1);
-  }
-  function orderStatusInfo(st) {
-    if (st === 'onway') return { chip: 'onway', label: 'On the way', admin: 'Rider' };
-    if (st === 'delivered') return { chip: 'done', label: 'Delivered', admin: 'Delivered' };
-    if (st === 'cancelled') return { chip: 'cancel', label: 'Refunded', admin: 'Refunded' };
-    return { chip: 'pending', label: 'Pending', admin: 'Kitchen' };
-  }
-  function formatOrderTime(t) {
-    var d = new Date(t);
-    if (isNaN(d.getTime())) return 'Today';
-    var today = new Date(); var same = new Date(t);
-    if (d.toDateString() === today.toDateString()) {
-      var h = d.getHours(); var ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12;
-      return 'Today ' + h + ':' + ('0' + d.getMinutes()).slice(-2) + ' ' + ap;
-    }
-    var diff = Math.round((today - same) / 86400000);
-    if (diff === 1) return 'Yesterday';
-    return d.toLocaleDateString('en-in', { weekday: 'short' });
-  }
-  function moneyNice(n) { n = Number(n); if (!isFinite(n) || n < 0) n = 0; return '&#8377;' + n.toLocaleString('en-IN'); }
-
-  /* ---------- SHARED CART / WISHLIST ACCESSORS (any page) ---------- */
-  var CART_SK = 'stackly_cart';
-  var WISH_SK = 'stackly_wishlist';
-  function dishClean(it) {
-    if (!it || typeof it !== 'object') return null;
-    var name = String(it.name || it.id || 'Dish');
-    return {
-      id: String(it.id || name.toLowerCase().replace(/\s+/g, '-')),
-      name: name,
-      price: Number(it.price) || 0,
-      img: typeof it.img === 'string' ? it.img : '',
-      qty: Math.max(1, parseInt(it.qty, 10) || 1)
-    };
-  }
-  function getCart() {
-    try { var c = JSON.parse(localStorage.getItem(CART_SK)); return Array.isArray(c) ? c.map(dishClean).filter(Boolean) : []; } catch (e) { return []; }
-  }
-  function getWish() {
-    try { var w = JSON.parse(localStorage.getItem(WISH_SK)); return Array.isArray(w) ? w.map(dishClean).filter(Boolean) : []; } catch (e) { return []; }
-  }
-  function storeList(k, v) { try { localStorage.setItem(k, JSON.stringify(v || [])); } catch (e) { } }
-  function addToCartStore(dish) {
-    var cart = getCart();
-    var d = dishClean(dish) || { id: 'dish', name: 'Dish', price: 0, img: '', qty: 1 };
-    var ex = cart.filter(function (x) { return x.id === d.id; })[0];
-    if (ex) ex.qty += 1; else cart.push(d);
-    storeList(CART_SK, cart);
-    syncGlobalStore();
-    toast('Added to cart', '"' + d.name + '" &#8226; ' + moneyNice(d.price));
-    return cart;
-  }
-
-  function syncGlobalStore() {
-    if (window._refreshStoreUI) window._refreshStoreUI();
-    if (window._renderCustomer) window._renderCustomer();
-    if (window._renderAdmin) window._renderAdmin();
-  }
-  window.syncStoreUI = syncGlobalStore;
 
   /* ---------- SIGNUP (live regex validation) ---------- */
   var sform = document.getElementById('signupForm');
   if (sform) {
+    var sPass = sform.password;
+    var sConfirm = sform.confirm;
     var sTerms = document.getElementById('terms');
 
     var sSetups = [
@@ -1227,6 +872,14 @@
         required: true, reqMsg: 'Please enter your mobile number', okMsg: 'Looks good',
         validate: function (v) { return /^[6-9]\d{9}$/.test(v) ? { ok: true } : { ok: false, msg: 'Enter a valid 10-digit number starting with 6\u20139' }; }
       }),
+      makeValidator(sPass, {
+        required: true, reqMsg: 'Please create a password', okMsg: 'Looks good',
+        validate: function (v) { return v.length >= 4 ? { ok: true } : { ok: false, msg: 'Any 4+ characters (demo \u2014 not stored)' }; }
+      }),
+      makeValidator(sConfirm, {
+        required: true, reqMsg: 'Please confirm your password', okMsg: 'Passwords match',
+        validate: function (v) { return v === (sPass ? sPass.value : '') ? { ok: true } : { ok: false, msg: 'Passwords do not match' }; }
+      }),
       makeValidator(sTerms, {
         required: true, msg: 'Please accept the Terms and Privacy Policy', okMsg: ''
       })
@@ -1234,13 +887,7 @@
 
     var sRefresh = bindFormGate(sform, sSetups, sform.querySelector('.btn-glitter'));
     sform._onValid = function () {
-      var users = getUsers();
-      var email = sform.email.value.trim().toLowerCase();
-      if (users[email]) { vSet(sform.email, 'bad', 'An account with this email already exists'); sform.email.focus(); return; }
       var role = getRole();
-      users[email] = { name: sform.fullName.value.trim(), email: email, phone: sform.phone.value.trim(), role: role };
-      saveUsers(users);
-      try { sessionStorage.setItem('stackly_want_role', role); } catch (e) { }
       toast('Account created!', 'Welcome to Stackly. Now log in as ' + role + '.');
       setTimeout(function () { location.href = 'login.html'; }, 900);
     };
@@ -1253,69 +900,34 @@
       makeValidator(lform.email, {
         required: true, reqMsg: 'Please enter your email', okMsg: 'Looks good',
         validate: function (v) { return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v) ? { ok: true } : { ok: false, msg: 'Enter a valid email (e.g. you@mail.com)' }; }
+      }),
+      makeValidator(lform.password, {
+        required: true, reqMsg: 'Please enter your password', okMsg: 'Looks good',
+        validate: function (v) { return v.length >= 1 ? { ok: true } : { ok: false, msg: 'Please enter a password' }; }
       })
     ].filter(Boolean);
 
     var lRefresh = bindFormGate(lform, lSetups, lform.querySelector('.btn-glitter'));
     lform._onValid = function () {
-      var email = lform.email.value.trim().toLowerCase();
-      var wantRole = getRole();
-      var users = getUsers();
-      var user = users[email];
-      if (!user && email === DEMO.admin.email) user = DEMO.admin;
-      if (!user && email === DEMO.customer.email) user = DEMO.customer;
-      if (!user) { vSet(lform.email, 'bad', 'No account found. Please sign up first.'); newError('No account found'); return; }
-      if (user.role !== wantRole) {
-        newError('Role mismatch');
-        var sw = document.querySelector('.role-switch');
-        if (sw) { var opt = sw.querySelector('.role-opt.' + user.role); if (opt) opt.click(); }
-        toast('Select the ' + user.role.toUpperCase() + ' role', 'Your account is registered as ' + user.role + '.');
-        return;
-      }
-      localStorage.setItem(USER_KEY, JSON.stringify({ name: user.name, email: user.email, role: user.role, phone: user.phone }));
-      toast('Welcome back, ' + user.name.split(' ')[0] + '!', 'Redirecting to your ' + user.role + ' dashboard...');
-      setTimeout(function () { location.href = dashURL(user.role); }, 900);
+      var role = getRole();
+      toast('Welcome back!', 'Redirecting to your ' + role + ' demo dashboard...');
+      setTimeout(function () { location.href = dashURL(role); }, 900);
     };
     if (lRefresh) lRefresh();
   }
 
-  /* ---------- dashboard guard ---------- */
-  var dashMain = document.querySelector('.dash-layout');
-  if (dashMain) {
-    var sess = null;
-    try { sess = JSON.parse(localStorage.getItem(USER_KEY)); } catch (e) { }
-    var needRole = CURRENT.indexOf('admin') === 0 ? 'admin' : 'customer';
-    var needName = needRole === 'admin' ? 'Admin' : 'Customer';
-    if (!sess || !sess.role) { location.replace('login.html'); }
-    else if (sess.role !== needRole) { location.replace(dashURL(sess.role)); }
-    else {
-      document.body.classList.remove('no-scroll');
-      var nm = document.querySelectorAll('.dash-user-name');
-      nm.forEach(function (el) { el.textContent = sess.name; });
-      var av = document.querySelectorAll('.dash-avatar');
-      av.forEach(function (el) { el.textContent = sess.name.trim().charAt(0).toUpperCase(); if (needRole === 'admin') el.classList.add('violet'); });
-      var roleTag = $all('.dash-role-badge');
-      roleTag.forEach(function (el) { el.textContent = needName; });
-      var emailEl = document.querySelector('.dash-email');
-      if (emailEl) emailEl.textContent = sess.email;
-    }
-  }
-
   /* ---------- dashboard catch-all: every button / CTA (except nav + logout) -> 404dash ---------- */
-  if (dashMain) {
+  if (document.querySelector('.dash-layout')) {
     document.addEventListener('click', function (e) {
       var el = e.target;
       if (!el || !el.closest) return;
       if (el.closest('.dash-nav .dash-link')) return;
       if (el.closest('.js-logout')) return;
       if (el.closest('.dash-avatar')) return;
-      if (el.closest('.js-cart-open, .js-wish-open')) return;
-      if (el.closest('.mini-drawer, .drawer-overlay, .order-pop-overlay')) return;
+      if (el.closest('.js-order-again')) return;
       if (el.closest('.burger, .sidebar-close, .skip-link')) return;
       var go = el.closest('button') || (el.closest('a[href]') && el.closest('a[href]').getAttribute('href') !== '#');
       if (!go) return;
-      if (el.closest('[data-advance]')) return;
-      if (el.closest('.js-order-again')) return;
       if (el.closest('form')) return;
       e.preventDefault();
       e.stopPropagation();
@@ -1323,196 +935,9 @@
     });
   }
 
-  /* ---------- CUSTOMER DASHBOARD LIVE DATA (orders · favourites · wallet) ---------- */
-  if (dashMain && CURRENT === 'customer-dashboard.html') {
-    var _custOrders = function () {
-      var sessMail = '', sessName = '';
-      try { var su = JSON.parse(localStorage.getItem(USER_KEY)); sessMail = (su && su.email) || ''; sessName = (su && su.name) || ''; } catch (e) { }
-      var all = getOrders().slice().sort(function (a, b) { return (b.time || 0) - (a.time || 0); });
-      if (!sessMail) return { all: all, mine: all };
-      return { all: all, mine: all.filter(function (o) { return o.customer && o.customer.email === sessMail; }) };
-    };
-
-    function renderCustomer() {
-      var orders = _custOrders();
-      var mine = orders.mine.length ? orders.mine : orders.all;
-      var badge = document.getElementById('orderCount');
-      if (badge) badge.textContent = mine.length;
-
-      var tot = document.getElementById('cTotalOrders');
-      if (tot) tot.innerHTML = mine.length;
-      var spent = document.getElementById('cTotalSpent');
-      if (spent) spent.innerHTML = moneyNice(mine.reduce(function (s, o) { return s + (o.subtotal || 0); }, 0));
-
-      var recent = document.getElementById('recentOrders');
-      if (recent) {
-        recent.innerHTML = '';
-        mine.slice(0, 3).forEach(function (o) {
-          var first = (o.items && o.items[0]) || {};
-          var st = orderStatusInfo(o.status);
-          var el = document.createElement('div');
-          el.className = 'dash-order-card';
-          el.innerHTML = '<img src="' + escHTML(first.img || '') + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' +
-            '<div class="do-body"><h4>' + escHTML(first.name || 'Order') + ' <span style="font-size:.8rem;color:rgba(255,255,255,.4)">&#8226; #' + escHTML(o.id || '') + '</span></h4>' +
-            '<p>' + escHTML((o.customer && o.customer.name) || 'Stackly') + ' &#8226; ' + (o.items ? o.items.length : 0) + ' item' + ((o.items && o.items.length) === 1 ? '' : 's') + '</p></div>' +
-            '<span class="chip ' + st.chip + '">' + st.label + '</span>';recent.appendChild(el);
-        });
-        if (!mine.length) recent.innerHTML = '<div class="drawer-empty" style="padding:28px 0"><b>No orders yet</b><p>Open the menu and place your first order!</p><a class="btn btn-primary btn-sm" href="menu.html">Browse Menu</a></div>';
-      }
-
-      var rows = document.getElementById('orderRows');
-      if (rows) {
-        rows.innerHTML = '';
-        mine.forEach(function (o) {
-          var first = (o.items && o.items[0]) || {};
-          var st = orderStatusInfo(o.status);
-          var span = document.createElement('span');
-          span.className = 'chip ' + st.chip;
-          span.textContent = st.label;
-          var tr = document.createElement('tr');
-          tr.innerHTML = '<td><div class="food"><img src="' + escHTML(first.img || '') + '" alt="" onerror="this.style.display=\'none\'"><b>' + escHTML(first.name || o.id || 'Order') + (o.items && o.items.length > 1 ? (' x' + o.items.length) : '') + '</b></div></td>' +
-            '<td>' + escHTML((o.customer && o.customer.name) || 'Stackly') + '</td>' +
-            '<td>' + moneyNice(o.subtotal) + '</td>';
-          var td = document.createElement('td'); td.appendChild(span); tr.appendChild(td);
-          tr.innerHTML += '<td>' + formatOrderTime(o.time) + '</td>';
-          rows.appendChild(tr);
-        });
-        if (!mine.length) rows.innerHTML = '<tr><td colspan="5" style="color:rgba(255,255,255,.45);text-align:center">Place an order and it will show up here.</td></tr>';
-      }
-
-      var fav = document.getElementById('favGrid');
-      if (fav) {
-        var wish = getWish();
-        var favBadge = document.getElementById('favCount');
-        if (favBadge) favBadge.textContent = wish.length;
-        fav.innerHTML = '';
-        if (!wish.length) {
-          fav.innerHTML = '<div class="drawer-empty" style="padding:28px 0;grid-column:1/-1"><b>Your wishlist is empty</b><p>Tap the heart on any dish to keep it here.</p><a class="btn btn-primary btn-sm" href="menu.html">Browse Menu</a></div>';
-          return;
-        }
-        wish.forEach(function (it) {
-          var el = document.createElement('div');
-          el.className = 'dash-order-card';
-          el.innerHTML = '<img src="' + escHTML(it.img) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' +
-            '<div class="do-body"><h4>' + escHTML(it.name) + '</h4><p>' + moneyNice(it.price) + '</p></div>' +
-            '<button class="btn btn-primary btn-sm js-order-again" data-name="' + escHTML(it.name) + '" data-price="' + it.price + '" data-img="' + escHTML(it.img) + '" type="button">Order again</button>';
-          fav.appendChild(el);
-        });
-      }
-    }
-
-    document.addEventListener('click', function (e) {
-      var oa = e.target.closest('.js-order-again');
-      if (!oa || !dashMain) return;
-      e.preventDefault();
-      addToCartStore({ id: null, name: oa.getAttribute('data-name'), price: oa.getAttribute('data-price'), img: oa.getAttribute('data-img'), qty: 1 });
-    });
-
-    renderCustomer();
-    window._renderCustomer = renderCustomer;
-  }
-
-  /* ---------- ADMIN DASHBOARD LIVE DATA (orders · revenue · customers) ---------- */
-  if (dashMain && CURRENT === 'admin-dashboard.html') {
-    function orderLabels(o) {
-      var first = (o.items && o.items[0]) || {};
-      return {
-        name: first.name || 'Order',
-        img: first.img || '',
-        qty: o.items ? o.items.reduce(function (s, it) { return s + (it.qty || 1); }, 0) : 1,
-        cust: (o.customer && o.customer.name) || 'Guest',
-        amount: o.subtotal || 0,
-        st: orderStatusInfo(o.status),
-        time: formatOrderTime(o.time)
-      };
-    }
-    function renderAdmin() {
-      var orders = getOrders().slice().sort(function (a, b) { return (b.time || 0) - (a.time || 0); });
-      var notif = document.querySelector('.dash-link[data-tab="orders"] .notif');
-      if (notif) notif.textContent = orders.length;
-
-      var startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-      var today = orders.filter(function (o) { return (o.time || 0) >= startOfDay.getTime(); });
-      var rev = document.getElementById('aRevenue');
-      if (rev) rev.innerHTML = moneyNice(today.reduce(function (s, o) { return s + (o.subtotal || 0); }, 0));
-      var ot = document.getElementById('aOrdersToday');
-      if (ot) ot.textContent = today.length;
-      var ac = document.getElementById('aCustomers');
-      if (ac) ac.textContent = Object.keys(getUsers()).length + 2;
-
-      /* live orders: only pending + onway, latest 6 */
-      var live = document.getElementById('liveRows');
-      if (live) {
-        live.innerHTML = '';
-        orders.filter(function (o) { return o.status === 'pending' || o.status === 'onway'; }).slice(0, 6).forEach(function (o) {
-          var L = orderLabels(o);
-          live.innerHTML += '<tr><td><div class="food"><img src="' + escHTML(L.img) + '" alt="" onerror="this.style.display=\'none\'"><b>' + escHTML(L.name) + ' x' + L.qty + '</b></div></td><td>' + escHTML(L.cust) + '</td><td>' + moneyNice(L.amount) + '</td><td><span class="chip ' + L.st.chip + '">' + L.st.admin + '</span></td><td>--</td></tr>';
-        });
-        if (!orders.filter(function (o) { return o.status === 'pending' || o.status === 'onway'; }).length) {
-          live.innerHTML = '<tr><td colspan="5" style="color:rgba(255,255,255,.45);text-align:center">No live orders right now.</td></tr>';
-        }
-      }
-
-      /* all orders */
-      var allRows = document.getElementById('allOrderRows');
-      if (allRows) {
-        allRows.innerHTML = '';
-        orders.slice(0, 50).forEach(function (o) {
-          var L = orderLabels(o);
-          allRows.innerHTML += '<tr><td>STK-' + escHTML(String(o.id || '').replace(/^STK-/, '')) + '</td><td><div class="food"><img src="' + escHTML(L.img) + '" alt="" onerror="this.style.display=\'none\'"><b>' + escHTML(L.name) + (L.qty > 1 ? ' x' + L.qty : '') + '</b></div></td><td>' + escHTML(L.cust) + '</td><td>' + moneyNice(L.amount) + '</td><td><span class="chip ' + L.st.chip + '">' + L.st.admin + '</span></td><td><button type="button" class="btn btn-ghost btn-sm" data-advance="' + escHTML(o.id) + '" style="padding:4px 10px;font-size:.72rem;color:#fff;border-color:var(--dark-line)">' + (o.status === 'pending' ? 'Send' : o.status === 'onway' ? 'Done' : '&mdash;') + '</button></td></tr>';
-        });
-        if (!orders.length) allRows.innerHTML = '<tr><td colspan="6" style="color:rgba(255,255,255,.45);text-align:center">No orders yet.</td></tr>';
-      }
-
-      /* customers */
-      var custRows = document.getElementById('custRows');
-      if (custRows) {
-        custRows.innerHTML = '';
-        var map = {};
-        orders.forEach(function (o) {
-          var em = (o.customer && o.customer.email) || 'guest';
-          if (!map[em]) map[em] = { name: (o.customer && o.customer.name) || 'Guest', n: 0, spent: 0 };
-          map[em].n += 1; map[em].spent += (o.subtotal || 0);
-        });
-        Object.keys(map).slice(0, 8).forEach(function (em) {
-          custRows.innerHTML += '<tr><td><b>' + escHTML(map[em].name) + '</b></td><td>' + map[em].n + '</td><td>' + moneyNice(map[em].spent) + '</td><td><span class="chip pending">Silver</span></td></tr>';
-        });
-        if (!Object.keys(map).length) custRows.innerHTML = '<tr><td colspan="4" style="color:rgba(255,255,255,.45);text-align:center">No customer data yet.</td></tr>';
-      }
-    }
-
-    document.addEventListener('click', function (e) {
-      var adv = e.target.closest('[data-advance]');
-      if (!adv) return;
-      e.preventDefault();
-      var id = adv.getAttribute('data-advance');
-      var orders = getOrders();
-      var o = orders.filter(function (x) { return x.id === id; })[0];
-      if (!o) return;
-      o.status = o.status === 'pending' ? 'onway' : o.status === 'onway' ? 'delivered' : o.status;
-      saveOrders(orders);
-      renderAdmin();
-      toast('Order updated', '#' + id + ' is now ' + orderStatusInfo(o.status).label + '.');
-    });
-
-    renderAdmin();
-    window._renderAdmin = renderAdmin;
-  }
-
-  /* redraw dashboards when another tab places / advances an order */
-  window.addEventListener('storage', function (e) {
-    if (e.key === ORDERS_KEY || e.key === CART_SK || e.key === WISH_SK) {
-      syncGlobalStore();
-    }
-  });
-  setInterval(function () {
-    syncGlobalStore();
-  }, 5000);
-
   /* ---------- logout ---------- */
   $all('.js-logout').forEach(function (btn) {
     btn.addEventListener('click', function () {
-      localStorage.removeItem(USER_KEY);
       toast('Signed out', 'See you soon!');
       setTimeout(function () { location.href = 'login.html'; }, 700);
     });
@@ -1527,15 +952,6 @@
       else location.href = IS_DASH ? 'customer-dashboard.html' : 'index.html';
     });
   });
-
-  /* ---------- dashboard home (role-aware) ---------- */
-  try {
-    var sess0 = JSON.parse(localStorage.getItem(USER_KEY)) || null;
-    $all('.js-dash-home').forEach(function (a) {
-      if (sess0 && sess0.role) a.href = sess0.role === 'admin' ? 'admin-dashboard.html' : 'customer-dashboard.html';
-      a.addEventListener('click', function () { try { sessionStorage.removeItem('stackly_ret_tab'); } catch (e) { } });
-    });
-  } catch (e) { }
 
   /* ---------- dashboard tab switching ---------- */
   var tabButtons = $all('[data-tab]');
@@ -1557,54 +973,30 @@
     });
   }
 
-  /* ---------- restore active tab after 404 round-trip ---------- */
-  if (dashMain) {
-    function clearRetTab() { try { sessionStorage.removeItem('stackly_ret_tab'); } catch (e) { } }
-    var retTab = '';
-    try { retTab = sessionStorage.getItem('stackly_ret_tab') || ''; } catch (e) { }
-    if (retTab) {
-      var retLink = document.querySelector('.dash-link[data-tab="' + retTab + '"]');
-      if (retLink) retLink.click();
-      clearRetTab();
-    }
-    window.addEventListener('pageshow', function (e) { if (e.persisted) clearRetTab(); });
-  }
-
-  /* ---------- dashboard inline forms prefill ---------- */
+  /* ---------- dashboard inline forms (validation only, no storage) ---------- */
   var pname = document.getElementById('dashName');
-  if (pname && dashMain) {
-    try {
-      var su = JSON.parse(localStorage.getItem(USER_KEY));
-      if (su) {
-        var nmv = document.getElementById('dashName'); if (nmv) nmv.value = su.name;
-        var emv = document.getElementById('dashEmail'); if (emv && emv.tagName === 'INPUT') emv.value = su.email;
-        var pwv = document.getElementById('dashPhone');
-        var profileSave = document.getElementById('dashProfileForm');
-        if (profileSave) {
-          liveCheck(document.getElementById('dashName'), { required: true, test: window.validators.name, msg: 'Enter a valid name', reqMsg: 'Please enter your name' });
-          liveCheck(document.getElementById('dashEmail'), { required: true, test: window.validators.email, msg: 'Enter a valid email', reqMsg: 'Please enter your email' });
-          liveCheck(document.getElementById('dashPhone'), { required: true, test: window.validators.phone, msg: 'Enter a valid 10-digit mobile number', reqMsg: 'Please enter your mobile number' });
-          liveCheck(document.getElementById('dashAddress'), { required: true, test: function (a) { return a.length >= 5; }, msg: 'Enter your full address', reqMsg: 'Please enter your address' });
-          profileSave.addEventListener('submit', function (e) {
-            e.preventDefault();
-            var ok = true;
-            $all('.dark-field', profileSave).forEach(function (fd) {
-              var inp = fd.querySelector('input, select, textarea');
-              if (!inp) return;
-              if (!inp.value.trim()) { fd.classList.add('error'); ok = false; }
-              else {
-                fd.classList.remove('error');
-                if (inp.type === 'email' && !window.validators.email.test(inp.value)) { fd.classList.add('error'); ok = false; }
-                if (inp.id === 'dashPhone' && !window.validators.phone.test(inp.value)) { fd.classList.add('error'); ok = false; }
-              }
-            });
-            if (!ok) { toast('Check your details', 'Make sure all fields are correct (10-digit phone).', 'error'); return; }
-            if (su) { su.name = document.getElementById('dashName').value.trim(); su.phone = document.getElementById('dashPhone').value.trim(); localStorage.setItem(USER_KEY, JSON.stringify(su)); }
-            toast('Profile updated', 'Your details have been saved.');
-          });
+  var profileSave = document.getElementById('dashProfileForm');
+  if (pname && document.querySelector('.dash-layout') && profileSave) {
+    liveCheck(document.getElementById('dashName'), { required: true, test: window.validators.name, msg: 'Enter a valid name', reqMsg: 'Please enter your name' });
+    liveCheck(document.getElementById('dashEmail'), { required: true, test: window.validators.email, msg: 'Enter a valid email', reqMsg: 'Please enter your email' });
+    liveCheck(document.getElementById('dashPhone'), { required: true, test: window.validators.phone, msg: 'Enter a valid 10-digit mobile number', reqMsg: 'Please enter your mobile number' });
+    liveCheck(document.getElementById('dashAddress'), { required: true, test: function (a) { return a.length >= 5; }, msg: 'Enter your full address', reqMsg: 'Please enter your address' });
+    profileSave.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var ok = true;
+      $all('.dark-field', profileSave).forEach(function (fd) {
+        var inp = fd.querySelector('input, select, textarea');
+        if (!inp) return;
+        if (!inp.value.trim()) { fd.classList.add('error'); ok = false; }
+        else {
+          fd.classList.remove('error');
+          if (inp.type === 'email' && !window.validators.email.test(inp.value)) { fd.classList.add('error'); ok = false; }
+          if (inp.id === 'dashPhone' && !window.validators.phone.test(inp.value)) { fd.classList.add('error'); ok = false; }
         }
-      }
-    } catch (e) { }
+      });
+      if (!ok) { toast('Check your details', 'Make sure all fields are correct (10-digit phone).', 'error'); return; }
+      toast('Profile updated', 'This is a demo \u2014 nothing is stored.');
+    });
   }
 
   /* ---------- document ready cosmetic ---------- */
