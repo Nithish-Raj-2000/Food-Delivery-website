@@ -1112,8 +1112,8 @@
   var USER_KEY = 'stackly_user';
   var USERS_KEY = 'stackly_users';
   var DEMO = {
-    admin: { name: 'Site Admin', email: 'admin@stackly.com', password: 'admin123', role: 'admin', phone: '9876543210' },
-    customer: { name: 'Aarav Sharma', email: 'customer@stackly.com', password: 'customer123', role: 'customer', phone: '9876543211' }
+    admin: { name: 'Site Admin', email: 'admin@stackly.com', role: 'admin', phone: '9876543210' },
+    customer: { name: 'Aarav Sharma', email: 'customer@stackly.com', role: 'customer', phone: '9876543211' }
   };
   function getUsers() {
     var raw = null;
@@ -1204,40 +1204,10 @@
   }
   window.syncStoreUI = syncGlobalStore;
 
-  /* demo chip autofill */
-  $all('[data-demo]').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      var which = byData(chip, 'demo');
-      var d = DEMO[which];
-      var set = function (id, v) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        el.value = v;
-        try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) { }
-      };
-      var setRole = function (role) {
-        var sw = document.querySelector('.role-switch');
-        if (!sw) return;
-        var opt = sw.querySelector('.role-opt.' + role);
-        if (opt) { opt.click(); }
-      };
-      if (which === 'admin' || which === 'customer') {
-        set('email', d.email);
-        set('password', d.password);
-        setRole(which);
-      }
-      toast('Demo credentials set', 'Now press Log In to explore the ' + which + ' dashboard.');
-    });
-  });
-
   /* ---------- SIGNUP (live regex validation) ---------- */
   var sform = document.getElementById('signupForm');
   if (sform) {
-    var sPass = sform.password;
-    var sConfirm = sform.confirm;
     var sTerms = document.getElementById('terms');
-
-    function sPaint() { if (sPass) paintMeter(sPass); }
 
     var sSetups = [
       makeValidator(sform.fullName, {
@@ -1257,27 +1227,10 @@
         required: true, reqMsg: 'Please enter your mobile number', okMsg: 'Looks good',
         validate: function (v) { return /^[6-9]\d{9}$/.test(v) ? { ok: true } : { ok: false, msg: 'Enter a valid 10-digit number starting with 6\u20139' }; }
       }),
-      makeValidator(sPass, {
-        required: true, reqMsg: 'Please create a password', okMsg: 'Looks good', onInput: sPaint,
-        validate: function (v) { return v.length >= 4 ? { ok: true } : { ok: false, msg: 'Any 4+ characters (demo \u2014 not stored)' }; }
-      }),
-      makeValidator(sConfirm, {
-        required: true, reqMsg: 'Please confirm your password', okMsg: 'Passwords match',
-        validate: function (v) { return v === (sPass ? sPass.value : '') ? { ok: true } : { ok: false, msg: 'Passwords do not match' }; }
-      }),
       makeValidator(sTerms, {
         required: true, msg: 'Please accept the Terms and Privacy Policy', okMsg: ''
       })
     ].filter(Boolean);
-
-    if (sPass) sPass.addEventListener('input', function () {
-      sPaint();
-      if (sConfirm && sConfirm.value) {
-        var cm = sConfirm.value === sPass.value;
-        vSet(sConfirm, cm ? 'good' : 'bad', cm ? '' : 'Passwords do not match', cm ? 'Passwords match' : '');
-      }
-    });
-    sPaint();
 
     var sRefresh = bindFormGate(sform, sSetups, sform.querySelector('.btn-glitter'));
     sform._onValid = function () {
@@ -1296,21 +1249,13 @@
   /* ---------- LOGIN (live regex validation) ---------- */
   var lform = document.getElementById('loginForm');
   if (lform) {
-    var lPass = lform.password;
-    function lPaint() { if (lPass) paintMeter(lPass); }
-
     var lSetups = [
       makeValidator(lform.email, {
         required: true, reqMsg: 'Please enter your email', okMsg: 'Looks good',
         validate: function (v) { return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(v) ? { ok: true } : { ok: false, msg: 'Enter a valid email (e.g. you@mail.com)' }; }
-      }),
-      makeValidator(lPass, {
-        required: true, reqMsg: 'Please enter your password', okMsg: 'Password entered', onInput: lPaint,
-        validate: function (v) { return v.length >= 1 ? { ok: true } : { ok: false, msg: 'Please enter your password' }; }
       })
     ].filter(Boolean);
 
-    lPaint();
     var lRefresh = bindFormGate(lform, lSetups, lform.querySelector('.btn-glitter'));
     lform._onValid = function () {
       var email = lform.email.value.trim().toLowerCase();
