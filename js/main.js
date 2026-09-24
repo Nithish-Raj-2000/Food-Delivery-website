@@ -100,11 +100,17 @@
     $all('.sidebar-close', dashSide).forEach(function (el) { el.addEventListener('click', function () { setDashSide(false); }); });
     if (dashOverlay) dashOverlay.addEventListener('click', function () { setDashSide(false); });
     $all('.dash-link', dashSide).forEach(function (l) { l.addEventListener('click', function () { setDashSide(false); }); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setDashSide(false); });
   }
 
   /* ---------- 404 routing for generic CTAs ---------- */
   $all('.js-404').forEach(function (el) {
     el.addEventListener('click', function (e) { e.preventDefault(); window.go404(); });
+    if (el.tabIndex >= 0) {
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); window.go404(); }
+      });
+    }
   });
   $all('.js-404dash').forEach(function (el) {
     el.addEventListener('click', function (e) { e.preventDefault(); window.go404(); });
@@ -1379,53 +1385,8 @@
       av.forEach(function (el) { el.textContent = sess.name.trim().charAt(0).toUpperCase(); if (needRole === 'admin') el.classList.add('violet'); });
       var roleTag = $all('.dash-role-badge');
       roleTag.forEach(function (el) { el.textContent = needName; });
-      var emailEl = document.getElementById('dashEmail');
-      if (emailEl && emailEl.tagName !== 'INPUT') emailEl.textContent = sess.email;
-    }
-  }
-
-  /* ---------- dashboard avatar drawer (name · email · role) ---------- */
-  if (dashMain) {
-    var dashAvatar = document.querySelector('.dash-avatar');
-    if (dashAvatar) {
-      var sess2 = null;
-      try { sess2 = JSON.parse(localStorage.getItem(USER_KEY)); } catch (e) { }
-      var popRole = (CURRENT.indexOf('admin') === 0 ? 'Admin' : 'Customer');
-      var popAva = (sess2 && sess2.name ? sess2.name.trim().charAt(0).toUpperCase() : (popRole === 'Admin' ? 'A' : 'C'));
-
-      var avPop = document.createElement('div');
-      avPop.className = 'dash-avatar-pop' + (popRole === 'Admin' ? ' violet' : '');
-      avPop.setAttribute('role', 'menu');
-      avPop.innerHTML =
-        '<div class="avp-head"><span class="avp-ava">' + escHTML(popAva) + '</span>' +
-        '<div><b>' + escHTML(sess2 && sess2.name ? sess2.name : (popRole === 'Admin' ? 'Site Admin' : 'Customer')) + '</b>' +
-        '<p>' + escHTML(sess2 && sess2.email ? sess2.email : (popRole === 'Admin' ? 'admin@stackly.com' : 'customer@stackly.com')) + '</p></div></div>' +
-        '<div class="avp-role"><span class="avp-role-tag">' + popRole + '</span></div>' +
-        '<button type="button" class="avp-logout js-logout">&#8594; Log out</button>';
-      document.body.appendChild(avPop);
-
-      function positionAvPop() {
-        var r = dashAvatar.getBoundingClientRect();
-        var pr = avPop.getBoundingClientRect();
-        avPop.style.top = (r.bottom + 14 + window.scrollY) + 'px';
-        avPop.style.right = (Math.max(8, window.innerWidth - r.right) + window.scrollX * 0) + 'px';
-        avPop.style.position = 'fixed';
-      }
-      function openAvPop(open) {
-        avPop.classList.toggle('open', open);
-        dashAvatar.classList.toggle('active', open);
-        if (open) positionAvPop();
-      }
-      dashAvatar.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        openAvPop(!avPop.classList.contains('open'));
-      });
-      document.addEventListener('click', function (e) {
-        if (avPop.classList.contains('open') && !e.target.closest('.dash-avatar-pop') && !e.target.closest('.dash-avatar')) openAvPop(false);
-      });
-      document.addEventListener('keydown', function (e) { if (e.key === 'Escape') openAvPop(false); });
-      window.addEventListener('resize', function () { if (avPop.classList.contains('open')) positionAvPop(); });
+      var emailEl = document.querySelector('.dash-email');
+      if (emailEl) emailEl.textContent = sess.email;
     }
   }
 
@@ -1436,7 +1397,7 @@
       if (!el || !el.closest) return;
       if (el.closest('.dash-nav .dash-link')) return;
       if (el.closest('.js-logout')) return;
-      if (el.closest('.dash-avatar, .dash-avatar-pop')) return;
+      if (el.closest('.dash-avatar')) return;
       if (el.closest('.js-cart-open, .js-wish-open')) return;
       if (el.closest('.mini-drawer, .drawer-overlay, .order-pop-overlay')) return;
       if (el.closest('.burger, .sidebar-close, .skip-link')) return;
