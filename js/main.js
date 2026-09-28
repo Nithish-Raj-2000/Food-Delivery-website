@@ -133,6 +133,7 @@
       if (!el || !el.closest) return;
       if (el.closest('form')) return;
       if (el.closest('.nav-link, a[href="login.html"], a.logo')) return;
+      if (el.closest('.burger, .sidebar-close, .sidebar-overlay')) return;
       if (el.closest('.toast-stack, .loader, .skip-link, .scroll-progress')) return;
       if (el.closest('a[href^="tel:"], a[href^="mailto:"]')) return;
       var hit = el.closest('button, a[href], [role="button"], [tabindex]');
